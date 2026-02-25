@@ -1,24 +1,21 @@
 use crate::tools::{ExecutionContext, ToolExecutor, ToolResult, ToolSchema};
-use anyhow::{Context, Result};
+use crate::utils::HTTP_CLIENT;
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use reqwest::Client;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Duration;
 
-pub struct WebSearchTool {
-    client: Client,
-}
+static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"<[^>]+>").unwrap()
+});
+
+pub struct WebSearchTool;
 
 impl WebSearchTool {
     pub fn new() -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .build()
-            .unwrap_or_else(|_| Client::new());
-        
-        Self { client }
+        Self
     }
 
     async fn search_searxng(&self, query: &str) -> Result<Vec<SearchResult>> {
@@ -27,14 +24,14 @@ impl WebSearchTool {
             urlencoding::encode(query)
         );
 
-        let response = self.client
+        let response = HTTP_CLIENT
             .get(&url)
             .send()
             .await
             .context("Failed to send search request to SearXNG")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("Search API returned status: {}", response.status()));
+            return Err(anyhow!("Search API returned status: {}", response.status()));
         }
 
         let search_response: SearXNGResponse = response
@@ -55,14 +52,14 @@ impl WebSearchTool {
             urlencoding::encode(query)
         );
 
-        let response = self.client
+        let response = HTTP_CLIENT
             .get(&url)
             .send()
             .await
             .context("Failed to send search request to DuckDuckGo")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("DuckDuckGo API returned status: {}", response.status()));
+            return Err(anyhow!("DuckDuckGo API returned status: {}", response.status()));
         }
 
         let ddg_response: DDGResponse = response
@@ -191,19 +188,11 @@ impl ToolExecutor for WebSearchTool {
     }
 }
 
-pub struct WebFetchTool {
-    client: Client,
-}
+pub struct WebFetchTool;
 
 impl WebFetchTool {
     pub fn new() -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .build()
-            .unwrap_or_else(|_| Client::new());
-        
-        Self { client }
+        Self
     }
 }
 
@@ -214,7 +203,7 @@ impl ToolExecutor for WebFetchTool {
             .and_then(|v| v.as_str())
             .context("Missing 'url' parameter")?;
 
-        let response = self.client
+        let response = HTTP_CLIENT
             .get(url)
             .send()
             .await
@@ -234,39 +223,25 @@ impl ToolExecutor for WebFetchTool {
 
         if content_type.contains("text/html") {
             let html = response.text().await.context("Failed to read HTML")?;
-            
             let text = extract_text_from_html(&html);
-            
             let truncated = if text.len() > 8000 {
                 format!("{}...\n\n[Content truncated, {} characters total]", 
                     &text[..8000], text.len())
             } else {
                 text
             };
-
-            Ok(ToolResult::success(format!(
-                "Content from {}:\n\n{}",
-                url, truncated
-            )))
+            Ok(ToolResult::success(format!("Content from {}:\n\n{}", url, truncated)))
         } else if content_type.contains("application/json") {
             let json = response.text().await.context("Failed to read JSON")?;
-            Ok(ToolResult::success(format!(
-                "JSON content from {}:\n\n{}",
-                url, json
-            )))
+            Ok(ToolResult::success(format!("JSON content from {}:\n\n{}", url, json)))
         } else {
             let text = response.text().await.context("Failed to read response")?;
-            
             let truncated = if text.len() > 8000 {
                 format!("{}...\n\n[Content truncated]", &text[..8000])
             } else {
                 text
             };
-
-            Ok(ToolResult::success(format!(
-                "Content from {}:\n\n{}",
-                url, truncated
-            )))
+            Ok(ToolResult::success(format!("Content from {}:\n\n{}", url, truncated)))
         }
     }
 
@@ -297,38 +272,17 @@ fn extract_text_from_html(html: &str) -> String {
     for line in html.lines() {
         let line_lower = line.to_lowercase();
         
-        if line_lower.contains("<script") || line_lower.contains("<script>") {
-            in_script = true;
-        }
-        if line_lower.contains("</script>") {
-            in_script = false;
-            continue;
-        }
-        if line_lower.contains("<style") || line_lower.contains("<style>") {
-            in_style = true;
-        }
-        if line_lower.contains("</style>") {
-            in_style = false;
-            continue;
-        }
-        if line_lower.contains("<!--") {
-            in_comment = true;
-        }
-        if line_lower.contains("-->") {
-            in_comment = false;
-            continue;
-        }
+        if line_lower.contains("<script") { in_script = true; }
+        if line_lower.contains("</script>") { in_script = false; continue; }
+        if line_lower.contains("<style") { in_style = true; }
+        if line_lower.contains("</style>") { in_style = false; continue; }
+        if line_lower.contains("<!--") { in_comment = true; }
+        if line_lower.contains("-->") { in_comment = false; continue; }
         
-        if in_script || in_style || in_comment {
-            continue;
-        }
+        if in_script || in_style || in_comment { continue; }
         
-        let mut cleaned = line.to_string();
-        
-        let re = regex::Regex::new(r"<[^>]+>").unwrap();
-        cleaned = re.replace_all(&cleaned, " ").to_string();
-        
-        cleaned = cleaned
+        let cleaned = HTML_TAG_RE.replace_all(line, " ").to_string();
+        let cleaned = cleaned
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
@@ -336,10 +290,7 @@ fn extract_text_from_html(html: &str) -> String {
             .replace("&quot;", "\"")
             .replace("&#39;", "'");
         
-        let cleaned: String = cleaned
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
+        let cleaned: String = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
         
         if !cleaned.is_empty() && cleaned.len() > 3 {
             text.push_str(&cleaned);

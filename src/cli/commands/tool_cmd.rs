@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::tools::{create_default_registry, ExecutionContext, ToolExecutor};
+use crate::tools::{create_default_registry, ExecutionContext};
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::path::PathBuf;

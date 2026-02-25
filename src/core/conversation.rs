@@ -1,6 +1,5 @@
-use crate::llm::{Message, ToolCall, ToolDefinition};
+use crate::llm::{Message, ToolDefinition};
 use crate::tools::ToolRegistry;
-use anyhow::Result;
 use std::sync::Arc;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};

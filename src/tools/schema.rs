@@ -27,7 +27,7 @@ impl ToolSchema {
     ) -> Self {
         let props: serde_json::Map<String, serde_json::Value> = properties
             .iter()
-            .map(|(name, desc, required)| {
+            .map(|(name, desc, _required)| {
                 (
                     name.to_string(),
                     json!({

@@ -1,26 +1,19 @@
 use crate::llm::{LlmClient, LlmClientConfig, LlmStream, Message, StreamEvent, ToolDefinition};
 use crate::llm::message::{ChatCompletionChunk, ChatCompletionResponse, messages_to_openai_format};
+use crate::utils::HTTP_CLIENT;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
-use reqwest::Client;
+use futures::StreamExt;
 use reqwest_eventsource::{Event, EventSource};
-use std::time::Duration;
 use tokio_stream::wrappers::ReceiverStream;
 
 pub struct OpenAIClient {
     config: LlmClientConfig,
-    client: Client,
 }
 
 impl OpenAIClient {
     pub fn new(config: LlmClientConfig) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_secs))
-            .build()
-            .context("Failed to create HTTP client")?;
-
-        Ok(Self { config, client })
+        Ok(Self { config })
     }
 
     fn build_request_body(
@@ -50,7 +43,7 @@ impl OpenAIClient {
     ) -> Result<ChatCompletionResponse> {
         let url = format!("{}/chat/completions", self.config.base_url);
         
-        let response = self.client
+        let response = HTTP_CLIENT
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .json(&body)
@@ -105,7 +98,7 @@ impl LlmClient for OpenAIClient {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamEvent>>(100);
 
         let event_source = EventSource::new(
-            self.client
+            HTTP_CLIENT
                 .post(&url)
                 .header("Authorization", format!("Bearer {}", self.config.api_key))
                 .json(&body),
@@ -186,8 +179,8 @@ impl LlmClient for OpenAIClient {
 
 pub fn create_client(config: LlmClientConfig, provider: &str) -> Result<Box<dyn LlmClient>> {
     match provider {
-        "zhipu" => Ok(Box::new(crate::llm::zhipu::ZhipuClient::new(config)?)),
-        "deepseek" => Ok(Box::new(crate::llm::deepseek::DeepSeekClient::new(config)?)),
+        "zhipu" => Ok(Box::new(super::zhipu::ZhipuClient::new(config)?)),
+        "deepseek" => Ok(Box::new(super::deepseek::DeepSeekClient::new(config)?)),
         "openai" => Ok(Box::new(OpenAIClient::new(config)?)),
         _ => Err(anyhow!("Unknown LLM provider: {}", provider)),
     }

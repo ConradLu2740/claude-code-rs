@@ -1,6 +1,6 @@
 use crate::config::SandboxConfig;
 use crate::tools::{ExecutionContext, ToolExecutor, ToolResult, ToolSchema};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{json, Value};

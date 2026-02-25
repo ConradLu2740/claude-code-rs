@@ -1,6 +1,5 @@
 use crate::llm::Message;
 use anyhow::Result;
-use std::collections::VecDeque;
 
 pub struct ContextManager {
     max_tokens: usize,

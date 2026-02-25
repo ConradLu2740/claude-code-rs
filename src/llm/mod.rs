@@ -8,3 +8,6 @@ pub mod openai;
 pub use client::*;
 pub use message::*;
 pub use streaming::*;
+pub use zhipu::*;
+pub use deepseek::*;
+pub use openai::*;

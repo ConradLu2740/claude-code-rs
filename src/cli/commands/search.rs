@@ -1,7 +1,7 @@
 use crate::config::AppConfig;
 use anyhow::Result;
 
-pub fn run_search(config: &AppConfig, query: &str, top_k: usize) -> Result<()> {
+pub fn run_search(_config: &AppConfig, query: &str, top_k: usize) -> Result<()> {
     println!("Searching for: {}", query);
     println!("Top K: {}", top_k);
     

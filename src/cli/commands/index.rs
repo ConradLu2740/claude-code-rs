@@ -2,7 +2,7 @@ use crate::config::AppConfig;
 use anyhow::Result;
 use std::path::PathBuf;
 
-pub fn run_index(config: &AppConfig, path: PathBuf, force: bool) -> Result<()> {
+pub fn run_index(_config: &AppConfig, path: PathBuf, _force: bool) -> Result<()> {
     println!("Indexing codebase at: {:?}", path);
     
     if !path.exists() {

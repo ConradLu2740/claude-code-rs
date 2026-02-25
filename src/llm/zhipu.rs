@@ -1,27 +1,21 @@
 use crate::llm::{LlmClient, LlmClientConfig, LlmStream, Message, StreamEvent, ToolDefinition};
 use crate::llm::message::{ChatCompletionChunk, ChatCompletionResponse, messages_to_openai_format};
+use crate::utils::HTTP_CLIENT;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use futures::{Stream, StreamExt};
-use reqwest::Client;
+use futures::StreamExt;
 use reqwest_eventsource::{Event, EventSource};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::ReceiverStream;
 
 pub struct ZhipuClient {
     config: LlmClientConfig,
-    client: Client,
 }
 
 impl ZhipuClient {
     pub fn new(config: LlmClientConfig) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_secs))
-            .build()
-            .context("Failed to create HTTP client")?;
-
-        Ok(Self { config, client })
+        Ok(Self { config })
     }
 
     fn generate_jwt_token(api_key: &str) -> Result<String> {
@@ -93,7 +87,7 @@ impl ZhipuClient {
         let url = format!("{}/chat/completions", self.config.base_url);
         let token = Self::generate_jwt_token(&self.config.api_key)?;
         
-        let response = self.client
+        let response = HTTP_CLIENT
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
             .json(&body)
@@ -149,7 +143,7 @@ impl LlmClient for ZhipuClient {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<StreamEvent>>(100);
 
         let event_source = EventSource::new(
-            self.client
+            HTTP_CLIENT
                 .post(&url)
                 .header("Authorization", format!("Bearer {}", token))
                 .json(&body),
